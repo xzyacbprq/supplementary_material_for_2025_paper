@@ -1,0 +1,30 @@
+commit 44ebd17b145c2372c4b700bfb9cb20dbd28ab64a
+Merge: fe3f809a 436d4881
+Author: Haian Huang(深度眸) <1286304229@qq.com>
+Date:   Fri Jan 5 14:10:48 2024 +0800
+
+    bump version to 3.3.0 (#11347)
+
+commit 436d48818d0c2e48fcb2ceb1fcb1fc411e2e192c
+Author: Haian Huang(深度眸) <1286304229@qq.com>
+Date:   Fri Jan 5 14:04:08 2024 +0800
+
+    Bump version to 3.3.0 (#11338)
+
+commit 10ae0b3edad495de2add113ec91d89e1910dd89e
+Author: R-Fehler <36566250+R-Fehler@users.noreply.github.com>
+Date:   Thu Jan 4 03:25:35 2024 +0100
+
+    replace '.jpg' instead of 'jpg' to guarantee replacing file ending (#11340)
+
+commit aeb4647b5b5a22e3beb39efcc7f64b4fdb58ec8d
+Author: Adnan Mujagic <adnanmujagic@outlook.com>
+Date:   Wed Jan 3 05:48:44 2024 +0100
+
+    Fix one of the CO-DETR config files (#11325)
+
+commit 46b10b106999581d21ca57c98b0d5e456042deb7
+Author: Cycyes <92714336+Cycyes@users.noreply.github.com>
+Date:   Wed Jan 3 11:25:42 2024 +0800
+
+    update English version of md (#11336)

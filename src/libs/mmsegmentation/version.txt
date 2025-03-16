@@ -1,0 +1,76 @@
+commit b040e147adfa027bbc071b624bedf0ae84dfc922
+Author: Miguel Méndez <miguelmndez@gmail.com>
+Date:   Fri Mar 22 11:04:17 2024 +0100
+
+    [Fix] bugfix/avoid-runner-iter-in-vis-hook-test-mode   (#3596)
+    
+    ## Motivation
+    
+    The current `SegVisualizationHook` implements the `_after_iter` method,
+    which is invoked during the validation and testing pipelines. However,
+    when in
+    [test_mode](https://github.com/open-mmlab/mmsegmentation/blob/main/mmseg/engine/hooks/visualization_hook.py#L97),
+    the implementation attempts to access `runner.iter`. This attribute is
+    defined in the [`mmengine`
+    codebase](https://github.com/open-mmlab/mmengine/blob/main/mmengine/runner/runner.py#L538)
+    and is designed to return `train_loop.iter`. Accessing this property
+    during testing can be problematic, particularly in scenarios where the
+    model is being evaluated post-training, without initiating a training
+    loop. This can lead to a crash if the implementation tries to build a
+    training dataset for which the annotation file is unavailable at the
+    time of evaluation. Thus, it is crucial to avoid relying on this
+    property in test mode.
+    
+    ## Modification
+    
+    To resolve this issue, the proposal is to replace the `_after_iter`
+    method with `after_val_iter` and `after_test_iter` methods, modifying
+    their behavior accordingly. Specifically, when in testing mode, the
+    implementation should utilize a `test_index` counter instead of
+    accessing `runner.iter`. This adjustment will circumvent the issue of
+    accessing `train_loop.iter` during test mode, ensuring the process does
+    not attempt to access or build a training dataset, thereby preventing
+    potential crashes due to missing annotation files.
+
+commit b6770816e539afcc6a4ed629df0a5bb1cefc2df7
+Author: zoulinxin <linxinzou@foxmail.com>
+Date:   Mon Mar 18 12:56:40 2024 +0800
+
+    [Fix] Fix cd transform (#3598)
+    
+    ## Motivation
+    
+    Fix the bug that data augmentation only takes effect on one image in the
+    change detection task.
+    
+    ## Modification
+    
+    configs/base/datasets/levir_256x256.py
+    configs/swin/swin-tiny-patch4-window7_upernet_1xb8-20k_levir-256x256.py
+    mmseg/datasets/transforms/transforms.py
+
+commit 5465118b8c294a2b99d44ffd5c93b11564725739
+Author: 谢昕辰 <xiexinch@outlook.com>
+Date:   Fri Mar 8 10:23:28 2024 +0800
+
+    [Fix] update build loss api (#3587)
+    
+    ## Motivation
+    
+    Use `MODELS.build` instead of `build_loss`
+    
+    ## Modification
+    
+    Please briefly describe what modification is made in this PR.
+
+commit be687fc476f0d3d636c810c25f09339da3e21f68
+Author: 谢昕辰 <xiexinch@outlook.com>
+Date:   Fri Mar 8 09:43:23 2024 +0800
+
+    fix (#3586)
+
+commit 95056cbcd7fd305f6982814e7a03c9a28ee97dec
+Author: 谢昕辰 <xiexinch@outlook.com>
+Date:   Thu Mar 7 18:53:00 2024 +0800
+
+    [Fix] FIx readthedocs subfix  (#3585)

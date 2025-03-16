@@ -1,0 +1,29 @@
+commit 3a5fb4b96ab1b241e7379adf7c326ef6edef6515
+Author: Mashiro <57566630+HAOCHENYE@users.noreply.github.com>
+Date:   Tue Apr 16 17:00:23 2024 +0800
+
+    Bump version to 2.2.0 (#3087)
+
+commit 780ffed9f3736fedadf18b51266ecbf521e64cf6
+Author: RRaoyzee <162255573+RRaoyzee@users.noreply.github.com>
+Date:   Wed Mar 13 15:15:46 2024 +0800
+
+    Add multi_scale_deform_attn_grad op adapter for NPU (#3042)
+
+commit cd05d71254c414af2906ed26d74879e404bcea10
+Author: DaGaiBa <59005671+DaGaiBa@users.noreply.github.com>
+Date:   Fri Mar 1 15:02:23 2024 +0800
+
+    Add multi_scale_deform_attn op adapter for NPU (#3032)
+
+commit d9e10e11846d911e8354cd024967d3a17a88083c
+Author: Chai <63941834+673958639@users.noreply.github.com>
+Date:   Mon Jan 29 19:18:01 2024 +0800
+
+    Fix ut of stack_grouping_points (#3026)
+
+commit 815f5d75a7a1aa2e8a642efbce9421801934524e
+Author: Chai <63941834+673958639@users.noreply.github.com>
+Date:   Mon Jan 29 17:05:23 2024 +0800
+
+    [Feature] Add the support for stack_group_points ops with Ascend (#3023)

@@ -1,0 +1,5 @@
+-r requirements/build.txt
+-r requirements/optional.txt
+-r requirements/runtime.txt
+pip install mmcv==2.2.0
+pip install terminaltables
