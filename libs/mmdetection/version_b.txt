@@ -1,3 +1,0 @@
-* (HEAD detached at v3.3.0)
-  main
-  version_b.txt
