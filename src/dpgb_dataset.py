@@ -6,13 +6,13 @@ from torch.utils.data import DataLoader
 from torchgeo.datasets import DeepGlobeLandCover, stack_samples
 from matplotlib import pyplot as plt
 from matplotlib import colors
-
+import albumentations as A
 from mmseg.structures import SegDataSample
 from mmengine.structures import PixelData
 
 class DeepGlobeDataset():
     def __init__(self, split = 'train', img_size = 128, num_class = 7, filter_data = True, aug_data = False, mean = 0.0):
-        root='/media/irfan/TRANSCEND/satellite_data/deep_globe'
+        root='/data/deep_globe'
         self.lc_dataset = DeepGlobeLandCover(root = root, split = split)
         self.img_size   = img_size
         self.num_class  = num_class
@@ -22,6 +22,12 @@ class DeepGlobeDataset():
         self.alphas = np.linspace(1.0,1.2,10)
         self.betas  = np.linspace(0,0.2,10)
         self.mean   = mean
+        self.trans = A.Compose([
+            A.OneOf([A.HueSaturationValue(40,40,30,p=1),
+                     A.RandomBrightnessContrast(p=1,brightness_limit = 0.2, contrast_limit = 0.5)], p = 0.5),
+            A.OneOf([A.RandomRotate90(p=1),
+                     A.HorizontalFlip(p=1),
+                     A.RandomSizedCrop(min_max_height = (int(0.6*img_size),img_size),size = (img_size,img_size), p =1)], p = 0.5)])
 
     def process_dpgb_mask(self, mask):
         new_mask = 0.0 * mask
@@ -69,46 +75,42 @@ class DeepGlobeDataset():
         edge_max  = edges.max()
         if edge_max > 0.0:
            edges     = edges/edge_max
-        imgs  = np.concatenate(imgs)
+        imgs  = np.concatenate(imgs).max(axis=0)
         return imgs, edges
         
     def process_mask_mmseg(self, img, gt, hres, imgs, edges):
         res     = {}
         res['inputs']       = img - self.mean
         res['gt_sem_seg']   = gt 
-        res['data_samples'] = SegDataSample()
-        res['data_samples'].set_metainfo(dict(img_path=self.count, seg_map_path='', ori_shape=img.shape[1:], img_shape=img.shape[1:]))
-        res['data_samples'].gt_sem_seg  = PixelData(data = torch.tensor(gt,dtype=torch.int64))
+        res['data_samples'] = {}
+        res['data_samples']['gt_sem_seg']  = torch.tensor(gt,dtype=torch.uint8)
     
         #hres = torch.concat([hres,edges])
-        res['data_samples'].gt_hres_img  = PixelData(data = torch.tensor(hres, dtype=torch.float32))
-        res['data_samples'].gt_hres_edge = PixelData(data = torch.tensor(edges, dtype=torch.float32))
-        res['data_samples'].gt_hres_mask = PixelData(data = torch.tensor(imgs, dtype=torch.float32))
+        #res['data_samples'].gt_hres_img  = torch.tensor(hres, dtype=torch.float32)
+        res['data_samples']['gt_hres_edge'] = torch.tensor(edges, dtype=torch.float32)
+        res['data_samples']['gt_hres_mask'] = torch.tensor(imgs, dtype=torch.float32)
         return res
         
     def __getitem__(self,idx):
         smp   = self.lc_dataset.__getitem__(idx)
         #img   = FF.resize(smp['image'],(self.img_size,self.img_size))/255.0
         #mask  = FF.resize(smp['mask'][None],(self.img_size,self.img_size))[0]
-        img  = cv2.resize(smp['image'], (self.img_size, self.img_size), interpolation = cv2.INTER_LINEAR)/255.0
-        mask = cv2.resize(smp['mask'], (self.img_size, self.img_size), interpolation = cv2.INTER_NEAREST)
+        img  = cv2.resize(smp['image'].permute(1,2,0).numpy().astype(np.uint8), (self.img_size, self.img_size), interpolation = cv2.INTER_LINEAR)/255.0
+        mask = cv2.resize(smp['mask'].numpy().astype(np.uint8), (self.img_size, self.img_size), interpolation = cv2.INTER_NEAREST)
+        '''
         if self.filter_data:
             if any([1 for i in range(self.num_class) if np.uint8(mask==i).sum() > (0.80*(self.img_size**2))]):
                 return {}
             if not any([1 for i in [1,4] if np.uint8(mask==i).sum() > (0.01*(self.img_size**2))]):
                 return {}
+        '''
         if self.aug_data:
-            aug   = np.random.choice([0,1,2])
-            alpha = np.random.choice(self.alphas)
-            beta  = np.random.choice(self.betas)
-            if aug == 1:    
-               img  = torch.flip(img,[1])
-               mask = torch.flip(mask,[0])
-               #img = torch.clip((img * alpha + beta),0,1)
-            if aug == 2:
-               img   = torch.flip(img,[2])
-               mask  = torch.flip(mask,[1])
-               #img = torch.clip((img * alpha + beta),0,1)
+            tout = self.trans(image = img.astype(np.float32), mask = mask)
+            img, mask = tout['image'], tout['mask']
+
+        img  = torch.tensor(img).permute(2,0,1)
+        mask = torch.tensor(mask)
+        mask = self.process_dpgb_mask(mask)
         imgs, edges = self.process_aux_feats(mask)
         res = self.process_mask_mmseg(img, mask, img, imgs, edges)
         self.count += 1
