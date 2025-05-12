@@ -1,5 +1,4 @@
 import os
-from tqdm import tqdm
 from copy import deepcopy
 import cv2
 import torch
@@ -21,7 +20,7 @@ from rasterio import CRS
 #crs = CRS.from_epsg('4326')
 crs = CRS.from_epsg('32618')
 res = 10 #9.286033889592977e-06
-#img_size = 128
+img_size = 128
 #res = 1.031851524257672e-05
 
 class Landsat8(Landsat):
@@ -30,7 +29,7 @@ class Landsat8(Landsat):
     filename_glob = 'LC08_*_{}.*'
     default_bands = ('B2', 'B3', 'B4', 'B5', 'B6')
     rgb_bands = ('B4', 'B3', 'B2')
-lsat_dataset = Landsat8('/media/irfan/TRANSCEND/satellite_data/us_cpk_l08_usgs', crs = crs, res = 3*res)
+img_dataset = Landsat8('/media/irfan/TRANSCEND/satellite_data/us_cpk_l08_usgs', crs = crs, res = 3*res)
 
 mask = 'cpk'
 if mask == 'agb':
@@ -74,58 +73,44 @@ if aux == 'naip':
     #aux_dataset = NAIP(naip_root, crs = crs, res = res / 3)
     import pickle
     with open('data/aux_dataset.pkl','rb') as file:
-        naip_dataset = pickle.load(file)
+        aux_dataset = pickle.load(file)
 
 class NDVIDataset(Dataset):
-    def __init__(self, split = 'train', name = 'naip', img_size = 128, num_class = 4, mean = 0.0):
+    def __init__(self, split = 'train', name = 'naip', img_size = 128, num_class = 4):
         self.name = name
         self.img_size  = img_size
         self.num_class = num_class
         if split == 'train':
-            self.dataset      = eval(f'{name}_dataset')  
+            self.dataset      = img_dataset  
             self.mask_dataset = train_mask_dataset
-            #self.dataset &= self.mask_dataset
+            self.aux_dataset  = aux_dataset #& deepcopy(train_mask_dataset)
+            
         if split == 'val':
-            self.dataset = eval(f'{name}_dataset')
+            self.dataset      = img_dataset  
             self.mask_dataset = val_mask_dataset
-            #self.dataset &= self.mask_dataset
+            self.aux_dataset  = aux_dataset #& deepcopy(val_mask_dataset)
         
         self.mint    = 0.0    #self.dataset.bounds.mint 
         self.maxt    = 1.6e10 #self.dataset.bounds.maxt
-        self.index   = (lsat_dataset.index & self.mask_dataset.index) & naip_dataset.index
+        self.index   = (self.dataset.index & self.mask_dataset.index) & self.aux_dataset.index
         self.res     = self.mask_dataset.res
         self.count   = 0
         self.non_zero_thr = 0.1*(self.img_size**2)
-        self.mean    = mean
-        self.min_area = int(0.03*(img_size**2))#512
-        self.sampler = iter(GridGeoSampler(self, img_size, img_size, units=Units.PIXELS))
-        bb         = self.dataset.bounds 
-        self.bound = BoundingBox(minx = bb.minx, 
-                                 maxx = bb.maxx, 
-                                 miny = bb.miny,
-                                 maxy = bb.maxy,
-                                 mint = bb.mint,
-                                 maxt = bb.maxt)
-        self.boxes = []
-        for bbox in self.sampler:
-            if not self.bound.intersects(bbox):
-                continue
-            self.boxes.append(bbox)
-        self.reset()
-
-    def reset(self):
-        for idx in tqdm(range(len(self.boxes))):
-            ret = self.__getitem__(idx)
-            if ret is None:
-                break
-                
-    def process_mask_mmseg(self, img, gt, imgs, edges):
+        
+    def process_mask_mmseg(self, img, gt, hres, imgs, edges):
         res     = {}
-        res['inputs'] = img - self.mean
-        res['data_samples'] = {}
-        res['data_samples']['gt_sem_seg']   = torch.tensor(gt, dtype=torch.uint8)
-        res['data_samples']['gt_hres_edge'] = torch.tensor(edges, dtype=torch.float32)
-        res['data_samples']['gt_hres_mask'] = torch.tensor(imgs, dtype=torch.float32)
+        if self.name == 'naip':
+           res['inputs'] = hres
+        if self.name == 'lsat':
+           res['inputs'] = img
+        
+        res['data_samples'] = SegDataSample()
+        res['data_samples'].set_metainfo(dict(img_path=self.count, seg_map_path='', ori_shape=img.shape[1:], img_shape=img.shape[1:]))
+        res['data_samples'].gt_sem_seg  = PixelData(data = torch.tensor(gt,dtype=torch.int16))
+    
+        #res['data_samples'].gt_hres_img  = PixelData(data = torch.tensor(hres, dtype=torch.float32))
+        res['data_samples'].gt_hres_edge = PixelData(data = torch.tensor(edges, dtype=torch.float32))
+        res['data_samples'].gt_hres_mask = PixelData(data = torch.tensor(imgs, dtype=torch.float32))
         return res
         
     def normdiff(self, x, y):
@@ -138,48 +123,43 @@ class NDVIDataset(Dataset):
    
         if np.uint8(img.max(axis=0)==0.0).sum() > self.non_zero_thr:
             return [] 
-        
         b, g, r, n, s = img
         ndvi    = self.normdiff(n, r)
         ndwi    = self.normdiff(g, n)
         ndbi    = self.normdiff(s, n)
-        
+
         img        = torch.tensor(img[:3][[2,1,0]]/2**16,dtype=torch.float32)
-        img        = torch.clip(img,0.0,1.0)
         _min, _max = img.min(), img.max()
-        out        = (img - _min) / (_max - _min)
+        img        = (img - _min) / (_max - _min)
         
-        out     = np.concatenate([out, ndvi[None,:,:],ndwi[None,:,:]],axis = 0)
+        out     = np.concatenate([img, ndvi[None,:,:],ndwi[None,:,:]],axis = 0)
         return torch.tensor(out)
         
     def process_naip_rgbn(self, img):
                 
         if np.uint8(img.max(axis=0)==0.0).sum() > self.non_zero_thr:
             return []
-        
+            
         r, g, b, n = img
         ndvi = self.normdiff(n, r)
         ndwi = self.normdiff(g, n)
         #avg  = ((r + g + b + n)/4.0)/255.0
-        
-        out  = torch.tensor(img[:3]/255.0, dtype=torch.float32)
-        out  = np.concatenate([out, ndvi[None,:,:], ndwi[None,:,:]])
+        img  = torch.tensor(img[:3]/255.0, dtype=torch.float32)
+        out  = np.concatenate([img, ndvi[None,:,:], ndwi[None,:,:]])
         
         return torch.tensor(out)
 
     def process_cpk_mask(self, mask):
-        return mask
         mask[mask < 0]      = 0
         mask[mask > 12]     = 0
         new_mask = 0.0 * mask
         new_mask[mask == 1] = 1 # 1
         new_mask[mask == 3] = 2 # 2 
-        new_mask[mask == 4] = 2 # 3
         new_mask[mask == 5] = 2 # 3
         new_mask[mask == 7] = 3 # 4
         new_mask[mask == 8] = 3 # 4
         #new_mask[mask == 9] = 5
-        counts = [np.uint8(new_mask==i).sum()<self.min_area for i in [0,1,2]]
+        counts = [np.uint8(new_mask==i).sum()<512 for i in range(4)]
         if any(counts):
             return []
         return new_mask
@@ -198,7 +178,7 @@ class NDVIDataset(Dataset):
             _cnts = []
             for i,cnt in enumerate(cnts):
                 area = cv2.contourArea(cnt)
-                if area > 0 and area < (10000): #100
+                if area > 25 and area < (10000): #100
                     _cnts.append(cnt)
             edges     = cv2.drawContours(viz1, _cnts, -1, (255), 1)
             proc_mask = cv2.distanceTransform(curr_mask, cv2.DIST_L2, cv2.DIST_MASK_PRECISE)
@@ -216,44 +196,32 @@ class NDVIDataset(Dataset):
         edge_max  = edges.max()
         if edge_max > 0.0:
            edges     = edges/edge_max
-        imgs  = np.concatenate(imgs).max(axis=0)
+        imgs  = np.concatenate(imgs)
         return imgs, edges
         
-    def __getitem__(self,idx):
-        while 1:
-            if idx > len(self.boxes): 
-                return None
-            if idx >= len(self.boxes):
-                idx = -1
-            bbox    = self.boxes[idx]
-            mask    = self.mask_dataset.__getitem__(bbox)
-            mask    = self.process_cpk_mask(mask['mask'][0])
-            if not len(mask):
-                del self.boxes[idx]
-                continue
+    def __getitem__(self,bbox):
 
-            img     = self.dataset.__getitem__(bbox)
-            img     = img['image'][:5].numpy().copy() # G, ,R ,N, S
-            if self.name == 'lsat':    
-                img  = self.process_lsat_grns(img)
-            if self.name == 'naip':   
-                img = self.process_naip_rgbn(img)
-                
-            if not len(img):
-                del self.boxes[idx]
-                continue
-                
-            res = {}
-            res['mask']     = mask
-            res['image']    = img
-            imgs, edges = self.process_aux_feats(mask)
-            res = self.process_mask_mmseg(img, mask, imgs, edges)
-            self.count += 1
-            break
-        return res
+        mask    = self.mask_dataset.__getitem__(bbox)
+        mask    = self.process_cpk_mask(mask['mask'][0])
+        if not len(mask): return {}
         
-    def __len__(self):
-        return 2*(len(self.boxes)//2)
+        img     = self.dataset.__getitem__(bbox)
+        img     = img['image'][:5].numpy().copy() # G, ,R ,N, S
+        img     = self.process_lsat_grns(img)
+        if not len(img): return {}
+            
+        hres_img = self.aux_dataset.__getitem__(bbox)
+        hres_img = hres_img['image'].numpy().copy()
+        hres_img = self.process_naip_rgbn(hres_img)
+        if not len(hres_img): return {}
+            
+        res = {}
+        res['mask']     = mask
+        res['image']    = img
+        imgs, edges = self.process_aux_feats(mask)
+        res = self.process_mask_mmseg(img, mask, hres_img, imgs, edges)
+        self.count += 1
+        return res
         
 def collate_fn(batch):
     nbatch = []

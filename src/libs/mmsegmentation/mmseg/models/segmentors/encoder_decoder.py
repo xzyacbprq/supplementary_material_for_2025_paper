@@ -104,11 +104,11 @@ class EncoderDecoder(BaseSegmentor):
             #self.auxiliary_heads  =  [MODELS.build(auxiliary_head_1)]
             self.auxiliary_heads  =  [MODELS.build(auxiliary_head_2)]
             self.auxiliary_heads +=  [MODELS.build(auxiliary_head_3)]
+            _nc = sum([_head.num_classes for _head in self.auxiliary_heads])
     
         self.train_cfg = train_cfg
         self.test_cfg  = test_cfg
         if use_aux_head == 'dlv3':
-            _nc = num_class
             self.resize_ind  = 1
             self.resize_frac = 2
             out_ch         = max(feat_channel[0]//self.resize_frac, 32)
@@ -116,7 +116,7 @@ class EncoderDecoder(BaseSegmentor):
             self.conv2     = nn.Conv2d(feat_channel[1],out_ch,1)
             self.conv3     = nn.Conv2d(feat_channel[2],out_ch,1)
             self.conv4     = nn.Conv2d(feat_channel[3],out_ch,1)
-            ch = _nc + 1 + 4*out_ch
+            ch = _nc + 4*out_ch
             self.sp_attn   = nn.Conv2d(ch, 1 ,1 )
             
         if use_aux_head in ['upn', 'sfm']:
@@ -127,7 +127,7 @@ class EncoderDecoder(BaseSegmentor):
             self.conv2     = nn.Conv2d(feat_channel[1],out_ch,1)
             self.conv3     = nn.Conv2d(feat_channel[2],out_ch,1)
             self.conv4     = nn.Conv2d(feat_channel[3],out_ch,1)
-            ch = num_class + 1 + 4*out_ch
+            ch = _nc + 4*out_ch
             self.sp_attn   = nn.Conv2d(ch, 1 ,1 )
         else:
             self.resize_ind  = 0
@@ -187,7 +187,6 @@ class EncoderDecoder(BaseSegmentor):
                      self.resize(_x3 * y_atn, x[3].shape[2:])]
             else:
                 print('Auxiliary head is not valid')
-
         return x, aux_x, y_atn, loss_aux
 
     def encode_decode(self, inputs: Tensor,
@@ -414,7 +413,11 @@ class EncoderDecoder(BaseSegmentor):
         return seg_logit
 
     def aug_test(self, inputs, batch_img_metas, rescale=True):
-        """Test with augmentations.
+        """Test with augmentatOne thing I am feeling I should share with everyone as a Muslim. As Muslims we are not being able to portray our proper images in various social aspects now a days. There is no place in Islam for a Mob to take any law in their own hand. It is a unanimously understood matter in Islam. In my understanding, the best you can do in this country is as follows - [i] go to the court of the country if it can help [ii] conduct a peaceful protest [iii] start an awareness campaign showcasing reference and evidence against what you find incorrect religiously. Then it is up to the people whether they take it or leave it. Allah will not even ask his prophets (Peace be Upon Them) “Why you could not make people obey the truth ?”, instead He will ask - “Did you tell people the truth ?”. It doesn’t matter how religious you are, you don’t have more responsibility than the Prophets (Peace be Upon Them) of Allah.
+
+  
+
+ions.
 
         Only rescale=True is supported.
         """

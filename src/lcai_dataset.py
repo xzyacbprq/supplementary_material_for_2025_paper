@@ -66,8 +66,9 @@ class LandCoverDataset():
         #root='/media/irfan/TRANSCEND/satellite_data/landcover.ai/'
         root='/data/landcover.ai/'
         self.lc_dataset = LandCoverAI_1(root = root, split = split)
-        self.img_size = img_size
-        self.num_class = num_class
+        self.dsmp_ratio = 64/img_size
+        self.img_size   = max(img_size, 64)
+        self.num_class  = num_class
         self.count = 1
         self.filter_data = filter_data
         self.aug_data    = aug_data
@@ -78,7 +79,7 @@ class LandCoverDataset():
                      A.RandomBrightnessContrast(p=1,brightness_limit = 0.2, contrast_limit = 0.5)], p = 0.5),
             A.OneOf([A.RandomRotate90(p=1),
                      A.HorizontalFlip(p=1),
-                     A.RandomSizedCrop(min_max_height = (int(0.6*img_size),img_size),size = (img_size,img_size), p =1)], p = 0.5)])
+                     A.RandomSizedCrop(min_max_height = (int(0.6*self.img_size),self.img_size),size = (self.img_size,self.img_size), p =1)], p = 0.5)])
         self.indices = list(range(self.lc_dataset.__len__()))
         self.mean = mean
         if filter_data : self.reset()
@@ -88,6 +89,8 @@ class LandCoverDataset():
             ret = self.__getitem__(idx)
             if ret is None:
                 break
+        if len(self.indices)%2 == 1:
+            self.indices.append(self.indices[-1])
             
     def process_aux_feats(self, mask):
         _mm  = mask.numpy().copy().astype(np.uint8)
@@ -121,7 +124,7 @@ class LandCoverDataset():
         edge_max  = edges.max()
         if edge_max > 0.0:
            edges     = edges/edge_max
-        imgs  = np.concatenate(imgs)#.max(axis=0)
+        imgs  = np.concatenate(imgs).max(axis=0)
         return imgs, edges
         
     def process_mask_mmseg(self, img, gt, hres, imgs, edges):
@@ -142,8 +145,10 @@ class LandCoverDataset():
             if idx >= len(self.indices):
                 idx = -1
             smp = self.lc_dataset.__getitem__(self.indices[idx])
-            #smp['image'] = smp['image'].permute(1,2,0).numpy()
-            #smp['mask']  = smp['mask'].numpy()
+            if self.dsmp_ratio > 1:
+               img_size = int(64/self.dsmp_ratio)
+               smp['image'] = cv2.resize(smp['image'], (img_size, img_size), interpolation = cv2.INTER_LINEAR)#/255.0
+               smp['mask']  = cv2.resize(smp['mask'], (img_size, img_size), interpolation = cv2.INTER_NEAREST)
             img  = cv2.resize(smp['image'], (self.img_size, self.img_size), interpolation = cv2.INTER_LINEAR)/255.0
             mask = cv2.resize(smp['mask'], (self.img_size, self.img_size), interpolation = cv2.INTER_NEAREST)
             
